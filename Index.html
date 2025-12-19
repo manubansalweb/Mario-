@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Super Runner | Gold Edition</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;700&family=Orbitron:wght@700&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #87CEEB;
+            overflow: hidden;
+            font-family: 'Fredoka', sans-serif;
+            touch-action: none;
+            user-select: none;
+        }
+
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* --- UI HUD --- */
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .stat-box {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 8px 15px;
+            border-radius: 15px;
+            border: 3px solid #4facfe;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+            font-size: 1rem;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            pointer-events: auto; /* Enable for level clicking */
+        }
+
+        #level-box { cursor: pointer; transition: transform 0.1s; }
+        #level-box:active { transform: scale(0.95); }
+
+        /* --- OVERLAYS --- */
+        .overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(135, 206, 235, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            color: #2c3e50;
+            text-align: center;
+            backdrop-filter: blur(8px);
+        }
+
+        .hidden { display: none !important; }
+
+        h1 { 
+            font-family: 'Orbitron', sans-serif; 
+            font-size: clamp(2rem, 8vw, 4rem); 
+            margin: 0; 
+            color: #ffffff;
+            text-shadow: 4px 4px 0px #4facfe, 8px 8px 20px rgba(0,0,0,0.2);
+        }
+        
+        .btn-ui {
+            margin-top: 25px;
+            padding: 15px 45px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            background: #ffcc00;
+            color: #2c3e50;
+            border: 6px solid #ffffff;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 8px 0px #d4aa00;
+            transition: all 0.1s;
+        }
+
+        .btn-ui:hover { transform: translateY(-2px); box-shadow: 0 10px 0px #d4aa00; }
+        .btn-ui:active { transform: translateY(6px); box-shadow: 0 2px 0px #d4aa00; }
+
+        #mobile-controls {
+            position: absolute;
+            bottom: 40px;
+            left: 0;
+            width: 100%;
+            display: none;
+            justify-content: space-between;
+            padding: 0 40px;
+            box-sizing: border-box;
+            z-index: 50;
+        }
+
+        .touch-btn {
+            width: 70px;
+            height: 70px;
+            background: rgba(255, 255, 255, 0.8);
+            border: 4px solid #4facfe;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 28px;
+            box-shadow: 0 6px 0px rgba(0,0,0,0.1);
+        }
+
+        @media (max-width: 768px) { #mobile-controls { display: flex; } }
+    </style>
+</head>
+<body>
+
+<div id="game-container"></div>
+
+<div id="hud">
+    <div style="display: flex; gap: 10px;">
+        <div class="stat-box">🪙 <span id="coins">0</span></div>
+        <div class="stat-box" id="level-box" onclick="manualLevelChange()">🚩 Level <span id="level-display">1</span></div>
+    </div>
+    <div style="display: flex; gap: 10px;">
+        <div class="stat-box">❤️ <span id="lives">3</span></div>
+        <div class="stat-box">🏆 BEST: <span id="best">0</span></div>
+    </div>
+</div>
+
+<div id="start-screen" class="overlay">
+    <h1>SUPER RUNNER</h1>
+    <p style="color: #ffffff; font-weight: bold; font-size: 1.2rem; letter-spacing: 2px;">DOUBLE JUMP 🦘 & 5 LEVELS</p>
+    <button class="btn-ui" onclick="initGame()">START GAME</button>
+</div>
+
+<div id="death-screen" class="overlay hidden">
+    <h2 style="font-size: 3.5rem; color: #ff4757; margin: 0;">GAME OVER</h2>
+    <p id="death-stats" style="font-size: 1.3rem; font-weight: bold;"></p>
+    <button class="btn-ui" onclick="restartGame()">RETRY LEVEL</button>
+</div>
+
+<div id="win-screen" class="overlay hidden">
+    <h2 style="font-size: 3rem; color: #2ed573; margin: 0;">CONGRATULATIONS! 🎉</h2>
+    <p style="font-size: 1.5rem; font-weight: bold; color: white;">You Win! All levels completed.</p>
+    <p id="win-stats" style="font-size: 1.2rem; font-weight: bold;"></p>
+    <button class="btn-ui" onclick="location.reload()">PLAY AGAIN</button>
+</div>
+
+<div id="mobile-controls">
+    <div style="display: flex; gap: 15px;">
+        <div id="ctrl-left" class="touch-btn">⬅️</div>
+        <div id="ctrl-right" class="touch-btn">➡️</div>
+    </div>
+    <div id="ctrl-jump" class="touch-btn" style="background: #ffcc00;">⬆️</div>
+</div>
+
+<script>
+const AudioEngine = {
+    ctx: null,
+    init() { if (this.ctx) return; this.ctx = new (window.AudioContext || window.webkitAudioContext)(); },
+    playSfx(type) {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        if(type === 'jump') { osc.type = 'square'; osc.frequency.setValueAtTime(300, now); osc.frequency.exponentialRampToValueAtTime(800, now + 0.1); gain.gain.setValueAtTime(0.05, now); }
+        else if(type === 'doubleJump') { osc.type = 'square'; osc.frequency.setValueAtTime(500, now); osc.frequency.exponentialRampToValueAtTime(1000, now + 0.1); gain.gain.setValueAtTime(0.05, now); }
+        else if(type === 'coin') { osc.type = 'sine'; osc.frequency.setValueAtTime(1000, now); osc.frequency.setValueAtTime(1500, now + 0.05); gain.gain.setValueAtTime(0.05, now); }
+        else if(type === 'hit') { osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now); osc.frequency.linearRampToValueAtTime(50, now + 0.2); gain.gain.setValueAtTime(0.1, now); }
+        else if(type === 'flag') { osc.type = 'sine'; osc.frequency.setValueAtTime(200, now); osc.frequency.linearRampToValueAtTime(800, now + 0.5); gain.gain.setValueAtTime(0.1, now); }
+        osc.connect(gain); gain.connect(this.ctx.destination); osc.start(); osc.stop(now + 0.5);
+    }
+};
+
+class GameScene extends Phaser.Scene {
+    constructor() { 
+        super('GameScene'); 
+        this.currentLevel = 1;
+        this.maxLevels = 5;
+        this.totalScore = 0;
+    }
+
+    preload() {
+        this.generateAssets();
+    }
+
+    generateAssets() {
+        const create = (key, w, h, fn) => {
+            const g = this.make.graphics({x:0, y:0, add:false});
+            fn(g, w, h);
+            g.generateTexture(key, w, h);
+        };
+
+        create('player', 40, 64, (g) => {
+            g.fillStyle(0x2f3542, 1); g.fillCircle(20, 12, 10);
+            g.fillStyle(0xff4757, 1); g.fillRoundedRect(12, 22, 16, 24, 4);
+            g.fillStyle(0x2f3542, 1); g.fillRect(8, 24, 4, 18); g.fillRect(28, 24, 4, 18);
+            g.fillRect(14, 46, 5, 18); g.fillRect(21, 46, 5, 18);
+        });
+
+        create('tile-grass', 64, 64, (g) => {
+            g.fillStyle(0x784c26, 1); g.fillRect(0, 0, 64, 64);
+            g.fillStyle(0x2ed573, 1); g.fillRect(0, 0, 64, 20);
+            g.fillStyle(0x7bed9f, 1); g.fillRect(0, 0, 64, 6);
+        });
+
+        create('gold-coin', 40, 40, (g) => {
+            g.fillStyle(0xffcc00, 1); g.fillCircle(20, 20, 18);
+            g.lineStyle(3, 0xffa502, 1); g.strokeCircle(20, 20, 18);
+            g.fillStyle(0xffa502, 1); g.fillRect(17, 12, 6, 16);
+            g.fillRect(17, 12, 12, 4); g.fillRect(17, 24, 12, 4);
+        });
+
+        create('spike', 32, 48, (g) => {
+            g.fillStyle(0xff4757, 1); g.fillTriangle(0, 48, 16, 0, 32, 48);
+            g.lineStyle(2, 0xffffff, 1); g.strokeTriangle(0, 48, 16, 0, 32, 48);
+        });
+
+        create('cloud', 120, 60, (g) => {
+            g.fillStyle(0xffffff, 0.8); g.fillCircle(30, 30, 30); g.fillCircle(60, 30, 35); g.fillCircle(90, 30, 30);
+        });
+
+        create('flag-pole', 10, 128, (g) => {
+            g.fillStyle(0x2f3542, 1); g.fillRect(0, 0, 10, 128);
+        });
+
+        create('flag-red', 60, 40, (g) => {
+            g.fillStyle(0xff4757, 1); g.fillTriangle(0, 0, 60, 20, 0, 40);
+        });
+
+        create('jump-particle', 10, 10, (g) => {
+            g.fillStyle(0xffffff, 0.6); g.fillCircle(5, 5, 5);
+        });
+    }
+
+    create() {
+        this.isGameOver = false;
+        this.isFinishing = false;
+        this.score = 0;
+        this.lives = 3;
+        this.jumpsLeft = 2; // Double jump init
+        this.best = localStorage.getItem('bestScore') || 0;
+        
+        this.updateHUD();
+
+        this.cameras.main.setBackgroundColor('#87CEEB');
+        for (let i = 0; i < 40; i++) {
+            this.add.image(Phaser.Math.Between(0, 15000), Phaser.Math.Between(50, 300), 'cloud')
+                .setScrollFactor(Phaser.Math.FloatBetween(0.1, 0.3)).setScale(Phaser.Math.FloatBetween(0.5, 1.2));
+        }
+
+        const levelLengths = [4000, 6000, 8000, 10000, 12000];
+        const gapProb = [0.1, 0.2, 0.3, 0.4, 0.5];
+        const spikeDensity = [0.03, 0.05, 0.08, 0.1, 0.15];
+        
+        this.levelWidth = levelLengths[this.currentLevel - 1];
+        this.gapChance = gapProb[this.currentLevel - 1];
+        this.spikeChance = spikeDensity[this.currentLevel - 1];
+
+        this.platforms = this.physics.add.staticGroup();
+        this.hazards = this.physics.add.group({ allowGravity: false, immovable: true });
+        this.coins = this.physics.add.group({ allowGravity: false });
+        this.flagPoles = this.physics.add.staticGroup();
+
+        this.generateLevel();
+
+        this.player = this.physics.add.sprite(200, 400, 'player');
+        this.player.body.setGravityY(1600 + (this.currentLevel * 50));
+        this.player.setDragX(2000); 
+        this.player.setMaxVelocity(480 + (this.currentLevel * 20), 1200); 
+
+        this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+        this.cameras.main.setBounds(0, 0, this.levelWidth + 1000, 720);
+        this.physics.world.setBounds(0, 0, this.levelWidth + 1000, 1000);
+
+        this.physics.add.collider(this.player, this.platforms);
+        this.physics.add.overlap(this.player, this.coins, this.collectCoin, null, this);
+        this.physics.add.overlap(this.player, this.hazards, this.hitHazard, null, this);
+        this.physics.add.overlap(this.player, this.flagPoles, this.hitFlag, null, this);
+
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.setupMobile();
+        this.jumpBuffer = 0;
+    }
+
+    updateHUD() {
+        document.getElementById('coins').innerText = this.totalScore + this.score;
+        document.getElementById('lives').innerText = this.lives;
+        document.getElementById('level-display').innerText = this.currentLevel;
+        document.getElementById('best').innerText = this.best;
+    }
+
+    generateLevel() {
+        let curX = 0;
+        const groundY = 720 - 32;
+
+        while (curX < this.levelWidth) {
+            let isGap = Math.random() < this.gapChance && curX > 800;
+            if (isGap) {
+                curX += 300 + (this.currentLevel * 15);
+            } else {
+                let platLen = Phaser.Math.Between(5, 12);
+                for(let i=0; i<platLen; i++) {
+                    const block = this.platforms.create(curX, groundY, 'tile-grass').refreshBody();
+                    block.body.setSize(64, 64);
+                    if (Math.random() < this.spikeChance) this.hazards.create(curX, groundY - 56, 'spike');
+                    if (Math.random() > 0.85) this.coins.create(curX, groundY - 140, 'gold-coin');
+                    curX += 64;
+                }
+            }
+            if (Math.random() > 0.55) {
+                let hX = curX - 350;
+                let hY = groundY - Phaser.Math.Between(180, 280); 
+                let terraceLen = Phaser.Math.Between(3, 6);
+                for(let k=0; k<terraceLen; k++) {
+                    const terrace = this.platforms.create(hX + (k*64), hY, 'tile-grass').refreshBody();
+                    terrace.body.setSize(64, 64);
+                    if (k === 1) this.coins.create(hX + (k*64), hY - 60, 'gold-coin');
+                }
+            }
+        }
+
+        // End Zone
+        const finishX = curX + 200;
+        for(let i=0; i<10; i++) this.platforms.create(finishX + (i*64), groundY, 'tile-grass').refreshBody();
+        
+        this.pole = this.flagPoles.create(finishX + 128, groundY - 74, 'flag-pole').refreshBody();
+        this.flagSprite = this.add.image(finishX + 128 + 35, groundY - 120, 'flag-red');
+    }
+
+    setupMobile() {
+        this.mState = { left: false, right: false, jump: false };
+        const bind = (id, k) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.onpointerdown = (e) => { e.preventDefault(); this.mState[k] = true; };
+            el.onpointerup = (e) => { e.preventDefault(); this.mState[k] = false; };
+        };
+        bind('ctrl-left', 'left'); bind('ctrl-right', 'right'); bind('ctrl-jump', 'jump');
+    }
+
+    update(time, delta) {
+        if (this.isGameOver || this.isFinishing) return;
+        
+        const onGround = this.player.body.touching.down || this.player.body.blocked.down;
+        
+        if (onGround) {
+            this.jumpsLeft = 2;
+        }
+
+        const jumpRequest = Phaser.Input.Keyboard.JustDown(this.cursors.up) || 
+                            Phaser.Input.Keyboard.JustDown(this.cursors.space) || 
+                            this.mState.jump;
+
+        // Double Jump Logic
+        if (jumpRequest && this.jumpsLeft > 0) {
+            const isSecond = this.jumpsLeft === 1;
+            this.player.setVelocityY(isSecond ? -700 : -780);
+            this.jumpsLeft--;
+            
+            if (isSecond) {
+                AudioEngine.playSfx('doubleJump');
+                this.spawnJumpParticles();
+            } else {
+                AudioEngine.playSfx('jump');
+            }
+            this.tweens.add({ targets: this.player, scaleX: 0.8, scaleY: 1.2, duration: 100, yoyo: true });
+            
+            // Mobile toggle off
+            this.mState.jump = false;
+        }
+
+        let accel = 1800;
+        if (this.cursors.left.isDown || this.mState.left) {
+            this.player.setAccelerationX(-accel); this.player.setFlipX(true);
+        } else if (this.cursors.right.isDown || this.mState.right) {
+            this.player.setAccelerationX(accel); this.player.setFlipX(false);
+        } else { this.player.setAccelerationX(0); }
+
+        if (Math.abs(this.player.body.velocity.x) > 10) this.player.setAngle(this.player.flipX ? -10 : 10); else this.player.setAngle(0);
+        
+        if (this.player.y > 900) this.gameOver();
+    }
+
+    spawnJumpParticles() {
+        for(let i=0; i<5; i++) {
+            const p = this.add.image(this.player.x, this.player.y + 32, 'jump-particle');
+            this.physics.add.existing(p);
+            p.body.setVelocity(Phaser.Math.Between(-100, 100), Phaser.Math.Between(50, 150));
+            this.tweens.add({ targets: p, alpha: 0, scale: 0.2, duration: 400, onComplete: () => p.destroy() });
+        }
+    }
+
+    collectCoin(p, c) {
+        c.disableBody(true, true);
+        this.score += 50;
+        this.updateHUD();
+        AudioEngine.playSfx('coin');
+    }
+
+    hitFlag() {
+        if (this.isFinishing) return;
+        this.isFinishing = true;
+        this.player.setVelocity(0, 0);
+        this.player.setAcceleration(0, 0);
+        
+        AudioEngine.playSfx('flag');
+        
+        // Flag pulling animation
+        this.tweens.add({
+            targets: this.flagSprite,
+            y: this.flagSprite.y + 80,
+            duration: 800,
+            ease: 'Bounce.easeOut',
+            onComplete: () => {
+                this.totalScore += this.score;
+                if (this.currentLevel < this.maxLevels) {
+                    this.currentLevel++;
+                    this.scene.restart();
+                } else {
+                    this.winGame();
+                }
+            }
+        });
+    }
+
+    hitHazard() {
+        if (this.player.alpha < 1) return;
+        this.lives--;
+        this.updateHUD();
+        this.cameras.main.shake(150, 0.02);
+        AudioEngine.playSfx('hit');
+        if (this.lives <= 0) this.gameOver();
+        else {
+            this.player.setAlpha(0.5);
+            this.player.setVelocity(this.player.flipX ? 300 : -300, -500);
+            this.time.delayedCall(1500, () => this.player.setAlpha(1));
+        }
+    }
+
+    winGame() {
+        this.isGameOver = true;
+        this.physics.pause();
+        document.getElementById('win-stats').innerText = `TOTAL COINS: ${this.totalScore}`;
+        document.getElementById('win-screen').classList.remove('hidden');
+    }
+
+    gameOver() {
+        if (this.isGameOver) return;
+        this.isGameOver = true;
+        this.physics.pause();
+        this.player.setTint(0xff4757);
+        let finalScore = this.totalScore + this.score;
+        if (finalScore > this.best) localStorage.setItem('bestScore', finalScore);
+        document.getElementById('death-stats').innerText = `COINS THIS RUN: ${this.score}`;
+        document.getElementById('death-screen').classList.remove('hidden');
+    }
+}
+
+let game;
+function initGame() {
+    AudioEngine.init();
+    document.getElementById('start-screen').classList.add('hidden');
+    if (!game) {
+        const config = {
+            type: Phaser.AUTO,
+            parent: 'game-container',
+            width: 1280,
+            height: 720,
+            physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
+            scene: GameScene,
+            scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH }
+        };
+        game = new Phaser.Game(config);
+    } else {
+        game.scene.scenes[0].scene.restart();
+    }
+}
+
+function restartGame() {
+    document.getElementById('death-screen').classList.add('hidden');
+    if (game) game.scene.scenes[0].scene.restart();
+}
+
+function manualLevelChange() {
+    if (!game) return;
+    const scene = game.scene.scenes[0];
+    scene.currentLevel = (scene.currentLevel % scene.maxLevels) + 1;
+    scene.scene.restart();
+}
+</script>
+</body>
+</html>
+
